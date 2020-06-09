@@ -1,0 +1,82 @@
+
+#Calculating the entropy - which is the the messure of the randomness of the data
+def entropy(x):
+    np_fft = np.fft.fft(x)
+    amplitudes = 2 / len(x) * np.abs(np_fft)
+    PSD = np.abs(amplitudes)**2/len(x)
+    pi = PSD/np.sum(PSD)
+    e = -np.sum(np.multiply(pi,np.log(pi)))
+    return(e)
+            
+      
+
+# IIR filter
+# low pass filtering (LPF),where custom third-order elliptical infinite impulse
+# response (IIR) filter with cut-off frequency at 0.25 Hz (0.01 dB passband ripple; stopband at −100 dB) is employed to
+# separate the acceleration components due to gravity (GA) and bodily motion (BA) 
+def IIR_lowpass_filter(data, cutoff, fs, rp, rs, order):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    # Get the filter coefficients 
+    b, a = iirfilter(order, normal_cutoff, rp, rs, btype='low', analog=False, ftype='ellip')
+    y = filtfilt(b, a, data)
+    return y
+
+#  butter filter
+# A third order low-pass Butterworth filter with a cutoff frequency of 20 Hz.
+#since the energy spectrum of the human body motion lies mainly within the range of 0 Hz to 15 Hz
+def butter_lowpass_filter(data, cutoff,fs_in, order ,fs_out):
+    nyq = 0.5 * fs_in
+    normal_cutoff = cutoff / nyq
+    # Get the filter coefficients 
+    b, a = butter(order, normal_cutoff, btype='low', analog=False, fs=fs_out)
+    y = filtfilt(b, a, data)
+    return y
+
+## total square root of sum of squers of the data
+def signalMag(x,y,z):
+    return np.sqrt(x*x + y*y + z*z)
+
+
+### Calculating frequeancy parameter with DFT - Descrete Fourier Transform
+## The transform component represent the frequencies with the higher amplitude in the signal
+
+def freq_calc(y,index):
+    n = len(y)
+    freqs = fftfreq(n)
+    mask = freqs > 0
+    fft_val= fft(y,n)
+    amplitude = 2*np.abs(fft_val/n)
+    amplitude = amplitude[mask]
+    max_six_index = np.argpartition(amplitude, -6)[-6:]
+    max_six_ferq = freqs[mask][max_six_index]
+    average_freq = np.average(freqs[mask],weights=amplitude)
+    energy = np.mean(np.sum(amplitude**2))
+    bandsEnergy = np.sum(amplitude**2)
+    results = np.hstack([max_six_index, max_six_ferq, average_freq,energy,bandsEnergy])
+    return results[index]
+
+### Compute SMA - normalized signal magnitude area
+def SMA_calac(header,features, data, window_size):
+    data_abs = data.abs()
+    data_inagration = pd.DataFrame()
+    for col in data.columns:
+        data_inagration[col] = data_abs[col].rolling(window_size).apply(trapz, raw=False)
+    features[header+'_sma'] =  (1/2.56)*data_inagration.sum(axis = 1)
+    return features 
+
+
+
+# calculation the jerk - the derivative of the acceleration by (dA/dt)
+def jerk_calc(df,dt):
+    jerk_db=df.diff()/dt
+    return jerk_db
+
+#calculation cross correlation between Axes
+def cross_correlation(features, data, window_size):
+    corr = data.rolling(window_size).corr(pairwise=True)
+    combo = list(itertools.combinations(data.columns,2))
+    for i in np.arange(len(combo)):
+        features[combo[i][0]+'_'+combo[i][1]+'_correleation']= corr[combo[i][0]].xs(combo[i][1],level=1)
+    return features
+        
